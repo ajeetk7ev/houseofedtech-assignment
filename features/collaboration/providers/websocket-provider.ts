@@ -17,9 +17,19 @@ export class WebSocketCollabProvider {
     this.yDoc = yDoc;
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = window.location.hostname === "localhost" ? "localhost:3001" : window.location.host;
-    // serverUrl is the base WS server; roomname is appended automatically as `serverUrl/roomname`
-    const serverUrl = `${protocol}//${host}`;
+    const customWsUrl = process.env.NEXT_PUBLIC_COLLAB_WS_URL;
+    let serverUrl: string;
+
+    if (customWsUrl) {
+      if (customWsUrl.startsWith("ws://") || customWsUrl.startsWith("wss://")) {
+        serverUrl = customWsUrl;
+      } else {
+        serverUrl = `${protocol}//${customWsUrl}`;
+      }
+    } else {
+      const host = window.location.hostname === "localhost" ? "localhost:3001" : window.location.host;
+      serverUrl = `${protocol}//${host}`;
+    }
     const roomname = `ws/documents/${documentId}`;
 
     // Initialize WebsocketProvider with connect:false — ConnectionManager fetches the

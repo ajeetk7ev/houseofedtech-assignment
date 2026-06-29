@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: edtech-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: edtech_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d edtech_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: edtech-web
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/edtech_db?sslmode=disable
+      - AUTH_SECRET=some-very-secure-random-32-char-string-for-local-dev
+      - COLLAB_PORT=3001
+      - NEXTAUTH_URL=http://localhost:3000
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh -c "npx prisma db push && npm run start"
+
+  collab-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: edtech-collab-server
+    restart: always
+    ports:
+      - "3001:3001"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/edtech_db?sslmode=disable
+      - AUTH_SECRET=some-very-secure-random-32-char-string-for-local-dev
+      - COLLAB_PORT=3001
+    depends_on:
+      db:
+        condition: service_healthy
+    command: npm run collab-server
+
+volumes:
+  pgdata:
