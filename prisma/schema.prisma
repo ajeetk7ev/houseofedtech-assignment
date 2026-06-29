@@ -1,0 +1,148 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum DocumentRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
+model User {
+  id            String               @id @default(uuid())
+  name          String?
+  email         String?              @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String? // Nullable for Google OAuth users
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  accounts      Account[]
+  sessions      Session[]
+  memberships   DocumentMembership[]
+  operations    Operation[]
+  versions      Version[]
+}
+
+model Account {
+  id                String  @id @default(uuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Document {
+  id                  String               @id @default(uuid())
+  title               String
+  latestSnapshot      Bytes? // Stores binary Yjs update or document snapshot state
+  lastOperationNumber Int                  @default(0)
+  createdBy           String
+  isArchived          Boolean              @default(false)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  memberships         DocumentMembership[]
+  operations          Operation[]
+  versions            Version[]
+  syncStates          SyncState[]
+}
+
+model DocumentMembership {
+  id         String       @id @default(uuid())
+  documentId String
+  userId     String
+  role       DocumentRole
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, userId])
+}
+
+model Operation {
+  id             String    @id @default(uuid())
+  documentId     String
+  userId         String
+  clientId       String // Yjs client identifier (string or number represented as string)
+  sequenceNumber Int // Document operations are ordered
+  baseVersion    Int       @default(0)
+  operationType  String    @default("UPDATE")
+  update         Bytes // Binary Yjs update block
+  checksum       String?
+  createdAt      DateTime  @default(now())
+  syncedAt       DateTime?
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, sequenceNumber])
+  @@index([documentId, createdAt])
+}
+
+model Version {
+  id              String   @id @default(uuid())
+  documentId      String
+  title           String
+  description     String?
+  snapshot        Bytes // Binary document state at this version
+  createdBy       String
+  parentVersionId String?
+  isAutomatic     Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  document      Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  parentVersion Version?  @relation("VersionHierarchy", fields: [parentVersionId], references: [id], onDelete: SetNull)
+  childVersions Version[] @relation("VersionHierarchy")
+}
+
+model SyncState {
+  id                  String   @id @default(uuid())
+  documentId          String
+  deviceId            String // Unique ID per client device
+  lastServerOperation Int      @default(0)
+  lastClientOperation Int      @default(0)
+  lastSyncAt          DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, deviceId])
+}
